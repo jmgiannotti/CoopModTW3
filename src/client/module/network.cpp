@@ -41,7 +41,7 @@ namespace network
 
     const address& get_master_server()
     {
-        static const address master{"server.momo5502.com:28960"};
+        static const address master{"26.88.68.147:28960"};
         return master;
     }
 
