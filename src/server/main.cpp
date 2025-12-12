@@ -3,6 +3,10 @@
 #include "server.hpp"
 #include "console.hpp"
 
+#include <Windows.h>
+#include <mmsystem.h>
+#pragma comment(lib, "winmm.lib")
+
 extern "C"
 {
     int s_read_arc4random(void*, size_t)
@@ -39,7 +43,9 @@ namespace
 
         console::signal_handler handler([&s] { s.stop(); });
 
+        timeBeginPeriod(1);
         s.run();
+        timeEndPeriod(1);
 
         console::log("Terminating server...");
     }

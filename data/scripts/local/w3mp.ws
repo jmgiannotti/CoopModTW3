@@ -34,6 +34,13 @@ struct W3mPlayer
     var playerState : array<W3mPlayerState>;
 }
 
+struct W3mTrackedPlayer
+{
+    var guid : Uint64;
+    var entity : CEntity;
+    var lastUpdate : float;
+}
+
 import function W3mPrint(msg : string);
 import function W3mSetNpcDisplayName(npc : CNewNPC, npcName : string);
 import function W3mStorePlayerState(playerState : W3mPlayerState);
@@ -94,6 +101,7 @@ function ApplyPlayerState(actor : CActor, player : W3mPlayer)
     var targetPos : Vector;
     var playerState : W3mPlayerState;
     var angleHeading : float;
+    var dist : float;
 
     if (player.playerState.Size() < 1)
     {
@@ -114,12 +122,20 @@ function ApplyPlayerState(actor : CActor, player : W3mPlayer)
 
     movingAgent = (CMovingPhysicalAgentComponent)actor.GetMovingAgentComponent();
 
+    dist = VecDistance(actorPos, targetPos);
+
+    if (dist > 1.0)
+    {
+        actor.TeleportWithRotation(targetPos, playerState.angles);
+    }
+    else
+    {
+        movingAgent.ApplyVelocity(playerState.velocity);
+    }
+
     angleHeading = VecHeading(RotForward(playerState.angles));
 
-    actor.TeleportWithRotation(targetPos, playerState.angles);
-
     movingAgent.SetMoveType(ConvertToMoveType(playerState.moveType));
-    movingAgent.ApplyVelocity(playerState.velocity);
     movingAgent.SetGameplayMoveDirection(angleHeading);
 
     W3mSetSpeed(movingAgent, playerState.speed);
@@ -181,7 +197,7 @@ function CreateNewPlayerEntity() : CEntity
 
 statemachine class W3mStateMachine extends CEntity
 {
-    editable var players : array<CEntity>;
+    editable var trackedPlayers : array<W3mTrackedPlayer>;
 
     public function start()
     {
@@ -206,7 +222,7 @@ state MultiplayerState in W3mStateMachine
         while(true)
         {
             RunMultiplayerFrame();
-            Sleep(0.03);
+            Sleep(0.001);
         }
     }
 
@@ -218,34 +234,47 @@ state MultiplayerState in W3mStateMachine
 
     latent function UpdateOtherPlayers()
     {
-        var index : int;
+        var i, j : int;
         var player_states : array<W3mPlayer>;
+        var found : bool;
+        var tracked : W3mTrackedPlayer;
+        var currentTime : float;
 
+        currentTime = theGame.GetEngineTimeAsSeconds();
         player_states = W3mGetPlayerStates();
-        AdjustPlayers(player_states.Size());
 
-        for (index = 0; index < player_states.Size(); index += 1)
+        for (i = 0; i < player_states.Size(); i += 1)
         {
-            ApplyPlayerState((CActor)parent.players[index], player_states[index]);
+            found = false;
+            for (j = 0; j < parent.trackedPlayers.Size(); j += 1)
+            {
+                if (parent.trackedPlayers[j].guid == player_states[i].guid)
+                {
+                    ApplyPlayerState((CActor)parent.trackedPlayers[j].entity, player_states[i]);
+                    parent.trackedPlayers[j].lastUpdate = currentTime;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                tracked.guid = player_states[i].guid;
+                tracked.entity = CreateNewPlayerEntity();
+                tracked.lastUpdate = currentTime;
+
+                ApplyPlayerState((CActor)tracked.entity, player_states[i]);
+                parent.trackedPlayers.PushBack(tracked);
+            }
         }
-    }
 
-    latent function AdjustPlayers(count : int)
-    {
-        var current_player : CEntity;
-
-        while (parent.players.Size() > count)
+        for (i = parent.trackedPlayers.Size() - 1; i >= 0; i -= 1)
         {
-            current_player = parent.players[parent.players.Size() - 1];
-            parent.players.Remove(current_player);
-
-            current_player.Destroy();
-        }
-
-        while (parent.players.Size() < count)
-        {
-            current_player = CreateNewPlayerEntity();
-            parent.players.PushBack(current_player);
+            if (parent.trackedPlayers[i].lastUpdate != currentTime)
+            {
+                parent.trackedPlayers[i].entity.Destroy();
+                parent.trackedPlayers.Erase(i);
+            }
         }
     }
 }
@@ -270,4 +299,53 @@ exec function SetName(playerName: string)
 {
     W3mUpdatePlayerName(playerName);
     DisplayFeedMessage("Name changed: " + playerName);
+}
+
+exec function w3m_list()
+{
+    var states : array<W3mPlayer>;
+    var i : int;
+
+    states = W3mGetPlayerStates();
+    DisplayFeedMessage("Connected players: " + states.Size());
+    
+    for(i=0; i<states.Size(); i+=1)
+    {
+        DisplayFeedMessage("#" + i + ": " + states[i].playerName + " [" + states[i].guid + "]");
+    }
+}
+
+exec function w3m_tp(nameStr : string)
+{
+    var states : array<W3mPlayer>;
+    var i : int;
+    var pos : Vector;
+    var rot : EulerAngles;
+
+    states = W3mGetPlayerStates();
+    
+    for(i=0; i<states.Size(); i+=1)
+    {
+        if (states[i].playerName == nameStr)
+        {
+           if (states[i].playerState.Size() > 0)
+           {
+               pos = states[i].playerState[0].position;
+               rot = states[i].playerState[0].angles;
+               thePlayer.TeleportWithRotation(pos, rot);
+               DisplayFeedMessage("Teleported to " + nameStr);
+               return;
+           }
+        }
+    }
+    DisplayFeedMessage("Player not found: " + nameStr);
+}
+
+exec function w3m_unstuck()
+{
+    var pos : Vector;
+    pos = thePlayer.GetWorldPosition();
+    pos.Z += 3.0;
+    thePlayer.Teleport(pos);
+    DisplayFeedMessage("Unstuck!");
 }

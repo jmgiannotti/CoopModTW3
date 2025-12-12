@@ -95,7 +95,7 @@ namespace utils::compression
             result.resize(length);
 
             if (compress2(reinterpret_cast<Bytef*>(result.data()), &length, reinterpret_cast<const Bytef*>(data.data()),
-                          static_cast<uLong>(data.size()), Z_BEST_COMPRESSION) != Z_OK)
+                          static_cast<uLong>(data.size()), Z_BEST_SPEED) != Z_OK)
             {
                 return {};
             }

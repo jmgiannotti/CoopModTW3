@@ -1,4 +1,6 @@
 #include "../std_include.hpp"
+#include <thread>
+#include <chrono>
 
 #include "../loader/component_loader.hpp"
 
@@ -48,12 +50,24 @@ namespace network
         void post_load() override
         {
             get_network_manager();
+            
+            ping_thread_ = std::jthread([](std::stop_token st) {
+                while (!st.stop_requested())
+                {
+                    std::this_thread::sleep_for(std::chrono::seconds(5));
+                    (void)send(get_master_server(), "ping", "");
+                }
+            });
         }
 
         void pre_destroy() override
         {
+            ping_thread_ = {};
             get_network_manager().stop();
         }
+
+    private:
+        std::jthread ping_thread_{};
     };
 }
 

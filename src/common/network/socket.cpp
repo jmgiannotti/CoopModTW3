@@ -24,6 +24,10 @@ namespace network
             int i = 1;
             setsockopt(this->socket_, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<char*>(&i), static_cast<int>(sizeof(i)));
         }
+
+        const int size = 65536;
+        setsockopt(this->socket_, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&size), sizeof(size));
+        setsockopt(this->socket_, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&size), sizeof(size));
     }
 
     socket::~socket()

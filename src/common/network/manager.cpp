@@ -45,7 +45,9 @@ namespace network
         void dispatch_command(const utils::concurrency::container<manager::callback_map>& callbacks, const address& source,
                               const std::string_view& command, const std::string_view& data)
         {
-            const auto lower_command = utils::string::to_lower(std::string{command.begin(), command.end()});
+            std::string lower_command;
+            lower_command.reserve(command.size());
+            std::transform(command.begin(), command.end(), std::back_inserter(lower_command), ::tolower);
 
             callbacks.access([&](const manager::callback_map& map) {
                 const auto callback = map.find(lower_command);
@@ -155,7 +157,10 @@ namespace network
 
     bool manager::send(const address& address, const std::string& command, const std::string& data, const char separator) const
     {
-        std::string packet = "\xFF\xFF\xFF\xFF";
+        std::string packet;
+        packet.reserve(4 + command.size() + 1 + data.size());
+
+        packet.append("\xFF\xFF\xFF\xFF");
         packet.append(command);
         packet.push_back(separator);
         packet.append(data);

@@ -122,7 +122,7 @@ namespace scheduler
                 while (!stop_token.stop_requested())
                 {
                     execute(pipeline::async);
-                    std::this_thread::sleep_for(10ms);
+                    std::this_thread::sleep_for(1ms);
                 }
             });
         }

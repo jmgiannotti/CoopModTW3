@@ -3,6 +3,7 @@
 
 #include <utils/string.hpp>
 #include <utils/byte_buffer.hpp>
+#include <cmath>
 
 #include "console.hpp"
 
@@ -125,6 +126,20 @@ namespace
 
         const auto player_state = buffer.read<game::player>();
 
+        const auto is_valid_float = [](float f) { return !std::isnan(f) && !std::isinf(f); };
+
+        bool valid = true;
+        for (const auto& v : player_state.state.position) valid &= is_valid_float(v);
+        for (const auto& v : player_state.state.velocity) valid &= is_valid_float(v);
+        for (const auto& v : player_state.state.angles) valid &= is_valid_float(v);
+        valid &= is_valid_float(player_state.state.speed);
+
+        if (!valid)
+        {
+            console::log("Received invalid player state from %s (NaN/Inf detected)", source.to_string().data());
+            return;
+        }
+
         auto& client = clients[source];
         client.last_packet = std::chrono::high_resolution_clock::now();
         client.guid = player_state.guid;
@@ -138,37 +153,15 @@ namespace
         }
     }
 
-    void send_state(const network::manager& manager, const server::client_map& clients)
+    void send_state(const network::manager& manager, const std::vector<game::player>& states, const std::vector<network::address>& authenticated_clients)
     {
-        std::vector<game::player> states{};
-        states.reserve(clients.size());
-
-        for (const auto& val : clients | std::views::values)
-        {
-            if (!val.is_authenticated())
-            {
-                continue;
-            }
-
-            game::player player{};
-            player.guid = val.guid;
-            player.state = val.current_state;
-            player.state.state_id = val.state_id;
-            utils::string::copy(player.name, val.name.data());
-
-            states.emplace_back(std::move(player));
-        }
-
         utils::buffer_serializer buffer{};
         buffer.write(game::PROTOCOL);
         buffer.write_vector(states);
 
-        for (const auto& client : clients)
+        for (const auto& client_address : authenticated_clients)
         {
-            if (client.second.is_authenticated())
-            {
-                (void)manager.send(client.first, "states", buffer.get_buffer());
-            }
+            (void)manager.send(client_address, "states", buffer.get_buffer());
         }
     }
 }
@@ -198,7 +191,7 @@ void server::run()
     while (!this->stop_)
     {
         this->run_frame();
-        std::this_thread::sleep_for(30ms);
+        std::this_thread::sleep_for(15ms);
     }
 }
 
@@ -209,7 +202,10 @@ void server::stop()
 
 void server::run_frame()
 {
-    this->clients_.access([this](client_map& clients) {
+    std::vector<game::player> states{};
+    std::vector<network::address> authenticated_clients{};
+
+    this->clients_.access([&](client_map& clients) {
         const auto now = std::chrono::high_resolution_clock::now();
 
         for (auto i = clients.begin(); i != clients.end();)
@@ -223,12 +219,23 @@ void server::run_frame()
             }
             else
             {
+                if (i->second.is_authenticated())
+                {
+                    game::player player{};
+                    player.guid = i->second.guid;
+                    player.state = i->second.current_state;
+                    player.state.state_id = i->second.state_id;
+                    utils::string::copy(player.name, i->second.name.data());
+
+                    states.emplace_back(std::move(player));
+                    authenticated_clients.emplace_back(i->first);
+                }
                 ++i;
             }
         }
-
-        send_state(this->manager_, clients);
     });
+
+    send_state(this->manager_, states, authenticated_clients);
 }
 
 void server::on(const std::string& command, callback callback)
