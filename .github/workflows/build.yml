@@ -101,48 +101,4 @@ jobs:
           path: |
             build/${{matrix.preset}}/artifacts/server
 
-  deploy:
-    name: Deploy Server
-    needs: [build-windows, build-linux, verify-formatting]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main')
-    steps:
-      - name: Download master server binary
-        uses: actions/download-artifact@v6
-        with:
-          name: Linux Release Artifacts
-
-      - name: Download release data artifacts
-        uses: actions/download-artifact@v6
-        with:
-          name: Windows Release Data Artifacts
-          path: data
-
-      - name: Download release binaries
-        uses: actions/download-artifact@v6
-        with:
-          name: Windows Release Binaries
-
-      - name: Install SSH key
-        uses: shimataro/ssh-key-action@v2.7.0
-        with:
-          key: ${{ secrets.MOMO_SERVER_SSH_PRIVATE_KEY }}
-          known_hosts: "just-a-placeholder-so-we-dont-get-errors"
-
-      - name: Add known hosts
-        run: ssh-keyscan -H ${{ secrets.MOMO_SERVER_HOSTNAME }} >> ~/.ssh/known_hosts
-
-      - name: Upload Server Binary
-        run: rsync -avz server ${{ secrets.MOMO_SERVER_USER }}@${{ secrets.MOMO_SERVER_HOSTNAME }}:~/
-
-      - name: Remove old data
-        run: ssh ${{ secrets.MOMO_SERVER_USER }}@${{ secrets.MOMO_SERVER_HOSTNAME }} "rm -rf ${{ secrets.MOMO_SERVER_DATA_PATH }}/data/*"
-
-      - name: Upload Game Binary
-        run: rsync -avz w3m.exe ${{ secrets.MOMO_SERVER_USER }}@${{ secrets.MOMO_SERVER_HOSTNAME }}:${{ secrets.MOMO_SERVER_DATA_PATH }}/
-
-      - name: Upload Data Files
-        run: rsync -avz ./data/ ${{ secrets.MOMO_SERVER_USER }}@${{ secrets.MOMO_SERVER_HOSTNAME }}:${{ secrets.MOMO_SERVER_DATA_PATH }}/data/
-
-      - name: Publish changes
-        run: ssh ${{ secrets.MOMO_SERVER_USER }}@${{ secrets.MOMO_SERVER_HOSTNAME }} "${{ secrets.MOMO_SERVER_UPDATE_COMMAND }}"
+ 

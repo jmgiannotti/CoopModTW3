@@ -50,7 +50,7 @@ namespace network
         void post_load() override
         {
             get_network_manager();
-            
+
             ping_thread_ = std::jthread([](std::stop_token st) {
                 while (!st.stop_requested())
                 {
@@ -66,7 +66,7 @@ namespace network
             get_network_manager().stop();
         }
 
-    private:
+      private:
         std::jthread ping_thread_{};
     };
 }
